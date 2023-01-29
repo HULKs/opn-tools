@@ -6,6 +6,7 @@ setuptools.setup(
     packages=[
         'mkopn',
     ],
+    include_package_data=True,
     entry_points={
         'console_scripts': [
             'mkopn = mkopn:main',

@@ -1,118 +1,72 @@
-import gzip
 import hashlib
 import math
-import io
 import pathlib
-import re
 import shutil
 import sys
 
 
 def main():
-    if len(sys.argv) != 4:
-        print(
-            f'Usage: {sys.argv[0]} COMPRESSED_IMAGE_FILE INSTALLER_FILE OPN_OUTPUT_FILE'
-        )
+    if len(sys.argv) != 3:
+        print(f'Usage: {sys.argv[0]} COMPRESSED_ROOT_IMAGE_FILE OPN_OUTPUT_FILE')
         sys.exit(1)
 
-    compressed_image_file = pathlib.Path(sys.argv[1])
-    installer_file = pathlib.Path(sys.argv[2])
-    opn_file = pathlib.Path(sys.argv[3])
+    installer_file = pathlib.Path(__file__).parent / 'installer.sh'
+    root_image_file = pathlib.Path(sys.argv[1])
+    opn_file = pathlib.Path(sys.argv[2])
+
+    installer_file_size = installer_file.stat().st_size
+    root_image_file_size = root_image_file.stat().st_size
 
     header_size = 4096
-    installer_size = 1048576
-    with gzip.open(compressed_image_file, 'rb') as compressed:
-        image_file_size = compressed.seek(0, io.SEEK_END)
-    compressed_image_file_size = compressed_image_file.stat().st_size
+    padded_installer_file_size = math.ceil(installer_file_size / 1024) * 1024
+    installer_padding_size = padded_installer_file_size - installer_file_size
+    padded_root_image_file_size = math.ceil(root_image_file_size / 1024) * 1024
+    root_image_padding_size = padded_root_image_file_size - root_image_file_size
+    root_image_offset = header_size + padded_installer_file_size
 
-    with open(installer_file, 'rb') as file:
-        installer_file_contents = file.read()
+    with opn_file.open(mode='w+b', buffering=0) as opn:
+        # write empty header (is populated later)
+        opn.write(b'\x00' * 4096)
 
-    installer_file_contents = re.sub(
-        rb'IMAGE_CMP_SIZE=".*"', 'IMAGE_CMP_SIZE="{}"'.format(
-            math.ceil(compressed_image_file_size / 1024)).encode(),
-        installer_file_contents)
-    installer_file_contents = re.sub(
-        rb'IMAGE_RAW_SIZE=".*"', 'IMAGE_RAW_SIZE="{}"'.format(
-            math.ceil(image_file_size / 1024)).encode(),
-        installer_file_contents)
+        # write installer
+        with installer_file.open(mode='rb') as installer:
+            shutil.copyfileobj(installer, opn)
+        
+        # write installer padding
+        opn.write(b'\n' * installer_padding_size)
 
-    with open(opn_file, 'w+b', buffering=0) as opn:
-        # MAGIC_NUMBER (offset: 0, size: 8)
+        # write root image
+        with root_image_file.open(mode='rb') as root_image:
+            shutil.copyfileobj(root_image, opn)
+        
+        # write root image padding
+        opn.write(b'\x00' * root_image_padding_size)
+
+        # magic prefix
+        opn.seek(0)
         opn.write(b'ALDIMAGE')
 
-        # FLAGS (offset: 8, size: 1)
-        # 8: factory reset
-        # 4: fast erase
-        # 2: keep image
-        # 1: halt after upgrade
-        opn.write(b'\x80')
+        # installer size
+        opn.seek(96)
+        opn.write(padded_installer_file_size.to_bytes(8, byteorder='big'))
 
-        # zero (offset: 9, size: 86)
-        opn.write(b'\x00' * 86)
-
-        # UNKNOWN_A (offset: 95, size: 1)
-        opn.write(b'\x01')
-
-        # INSTALLER_SIZE_RAW (offset: 96, size: 8)
-        opn.write(b'\x00\x00\x00\x00\x00\x10\x00\x00')
-
-        # zero (offset: 104, size: 64)
-        opn.write(b'\x00' * 64)
-
-        # UNKNOWN_B (offset: 168, size: 1)
-        opn.write(b'\x01')
-
-        # ROBOT_KIND (offset: 169, size: 1)
-        # 0: nao
-        # 1: romeo
-        # 2: pepper
-        # 3: juliette
-        opn.write(b'\x00')
-
-        # UNKNOWN_C (offset: 170, size: 22)
-        opn.write(
-            b'\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x28\x8F\x18\x00'
-        )
-
-        # VERSION (offset: 192, size: 8)
-        # e.g. 2.8.5.11: 00 02 00 08 00 05 00 0B
-        opn.write(b'\x00\x02\x00\x08\x00\x05\x00\x0B')
-
-        # zero (offset: 200, size: 3896)
-        opn.write(b'\x00' * 3896)
-
-        # installer (offset: 4096, size: installer_size)
-        opn.write(installer_file_contents)
-        opn.write(b'\x00' * (installer_size - len(installer_file_contents)))
-
-        # compressed image (offset: 4096 + installer_size, size: math.ceil(compressed_image_file_size / 1024))
-        with open(compressed_image_file, 'rb') as compressed:
-            shutil.copyfileobj(compressed, opn)
-        opn.write(b'\x00' * (math.ceil(compressed_image_file_size / 1024) -
-                             compressed_image_file_size))
-
-        # installer SHA256 checksum (offset: 104, size: 32)
+        # installer checksum
+        installer_checksum = hashlib.sha256()
+        opn.seek(4096)
+        for _ in range(int(padded_installer_file_size / 1024)):
+            installer_checksum.update(opn.read(4096))
         opn.seek(104)
-        installer_checksum = hashlib.sha256(installer_file_contents + (
-            b'\x00' * (installer_size - len(installer_file_contents))))
         opn.write(installer_checksum.digest())
 
-        # image SHA256 checksum (offset: 136, size: 32)
-        def opn_sha256sum():
-            checksum_hash = hashlib.sha256()
-            buffer = bytearray(4096)
-            memory_view = memoryview(buffer)
-            for amount in iter(lambda: opn.readinto(memory_view), 0):
-                checksum_hash.update(memory_view[:amount])
-            return checksum_hash
+        # version e.g. 2.8.5.11: 00 02 00 08 00 05 00 0B
+        opn.seek(192)
+        opn.write(b'\x00\x02\x00\x08\x00\x05\x00\x0B')
 
-        opn.seek(header_size + installer_size)
-        image_checksum = opn_sha256sum()
+        # root image offset
         opn.seek(136)
-        opn.write(image_checksum.digest())
+        opn.write(root_image_offset.to_bytes(8, byteorder='big'))
 
-        # header SHA256 checksum (offset: 24, size: 32)
+        # header checksum
         opn.seek(56)
         header_checksum = hashlib.sha256(opn.read(4040))
         opn.seek(24)
@@ -120,5 +74,5 @@ def main():
 
         # print checksums
         print(f'Installer checksum: {installer_checksum.hexdigest()}')
-        print(f'Image checksum: {image_checksum.hexdigest()}')
         print(f'Header checksum: {header_checksum.hexdigest()}')
+        print(f'Root image offset: {root_image_offset}')
