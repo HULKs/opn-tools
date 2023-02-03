@@ -54,7 +54,7 @@ def main():
         installer_checksum = hashlib.sha256()
         opn.seek(4096)
         for _ in range(int(padded_installer_file_size / 1024)):
-            installer_checksum.update(opn.read(4096))
+            installer_checksum.update(opn.read(1024))
         opn.seek(104)
         opn.write(installer_checksum.digest())
 
