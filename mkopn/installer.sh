@@ -43,6 +43,7 @@ mkfs.ext2 -q /dev/mmcblk0p4
 mkdir -p /data
 mount /dev/mmcblk0p4 /data
 mkdir -p /data/.image
+chown 1001:1001 /data/.image
 umount /data
 
 # disable image
