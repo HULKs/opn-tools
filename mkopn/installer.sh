@@ -14,7 +14,9 @@ IMAGE_FILE="${3}"
 
 # write root
 ROOT_IMAGE_OFFSET=$(printf "%d" "0x$(hexdump -s136 -n8 -v -e "8/1 \"%02x\"" "${IMAGE_FILE}")")
-dd if="${IMAGE_FILE}" bs=1024 skip=$((ROOT_IMAGE_OFFSET / 1024)) | gunzip -c | dd of=/dev/mmcblk0p3
+INPUT_BLOCKSIZE=4096
+OUTPUT_BLOCKSIZE=4096
+dd if="${IMAGE_FILE}" bs="${INPUT_BLOCKSIZE}" skip=$((ROOT_IMAGE_OFFSET / INPUT_BLOCKSIZE)) | gunzip -c | dd of=/dev/mmcblk0p3 bs="${OUTPUT_BLOCKSIZE}"
 sync
 
 # recreate partitions

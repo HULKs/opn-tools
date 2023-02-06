@@ -18,15 +18,16 @@ def main():
     root_image_file_size = root_image_file.stat().st_size
 
     header_size = 4096
-    padded_installer_file_size = math.ceil(installer_file_size / 1024) * 1024
+    alignment = 4096
+    padded_installer_file_size = math.ceil(installer_file_size / alignment) * alignment
     installer_padding_size = padded_installer_file_size - installer_file_size
-    padded_root_image_file_size = math.ceil(root_image_file_size / 1024) * 1024
+    padded_root_image_file_size = math.ceil(root_image_file_size / alignment) * alignment
     root_image_padding_size = padded_root_image_file_size - root_image_file_size
-    root_image_offset = header_size + padded_installer_file_size
+    root_image_offset = math.ceil((header_size + padded_installer_file_size) / alignment) * alignment
 
     with opn_file.open(mode="w+b", buffering=0) as opn:
         # write empty header (is populated later)
-        opn.write(b"\x00" * 4096)
+        opn.write(b"\x00" * header_size)
 
         # write installer
         with installer_file.open(mode="rb") as installer:
@@ -36,6 +37,7 @@ def main():
         opn.write(b"\n" * installer_padding_size)
 
         # write root image
+        opn.seek(root_image_offset)
         with root_image_file.open(mode="rb") as root_image:
             shutil.copyfileobj(root_image, opn)
 
@@ -52,9 +54,9 @@ def main():
 
         # installer checksum
         installer_checksum = hashlib.sha256()
-        opn.seek(4096)
-        for _ in range(int(padded_installer_file_size / 1024)):
-            installer_checksum.update(opn.read(1024))
+        opn.seek(header_size)
+        for _ in range(int(padded_installer_file_size / alignment)):
+            installer_checksum.update(opn.read(alignment))
         opn.seek(104)
         opn.write(installer_checksum.digest())
 
