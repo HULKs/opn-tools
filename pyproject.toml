@@ -1,0 +1,10 @@
+[project]
+name = "opn_tools"
+version = "0.0.1"
+
+[project.scripts]
+mkopn = "mkopn:main"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
