@@ -19,6 +19,10 @@ OUTPUT_BLOCKSIZE=4096
 dd if="${IMAGE_FILE}" bs="${INPUT_BLOCKSIZE}" skip=$((ROOT_IMAGE_OFFSET / INPUT_BLOCKSIZE)) | gunzip -c | dd of=/dev/mmcblk0p3 bs="${OUTPUT_BLOCKSIZE}"
 sync
 
+# before adjusting partitions, unmount everything
+MOUNTED_FILE_SYSTEMS=$(mount | grep '^/dev' | cut -d' ' -f3)
+[ -n "${MOUNTED_FILE_SYSTEMS}" ] && (umount -fr "${MOUNTED_FILE_SYSTEMS}" && sync && sleep 2)
+
 # recreate partitions
 (
   # print the partition table
