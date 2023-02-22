@@ -6,24 +6,22 @@ import sys
 
 
 def main():
-    if len(sys.argv) != 3:
-        print(f"Usage: {sys.argv[0]} COMPRESSED_ROOT_IMAGE_FILE OPN_OUTPUT_FILE")
+    if len(sys.argv) != 2:
+        print(f"Usage: {sys.argv[0]} OPN_OUTPUT_FILE")
         sys.exit(1)
 
     installer_file = pathlib.Path(__file__).parent / "installer.sh"
-    root_image_file = pathlib.Path(sys.argv[1])
-    opn_file = pathlib.Path(sys.argv[2])
+    opn_file = pathlib.Path(sys.argv[1])
 
     installer_file_size = installer_file.stat().st_size
-    root_image_file_size = root_image_file.stat().st_size
 
     header_size = 4096
     alignment = 4096
     padded_installer_file_size = math.ceil(installer_file_size / alignment) * alignment
     installer_padding_size = padded_installer_file_size - installer_file_size
-    padded_root_image_file_size = math.ceil(root_image_file_size / alignment) * alignment
-    root_image_padding_size = padded_root_image_file_size - root_image_file_size
-    root_image_offset = math.ceil((header_size + padded_installer_file_size) / alignment) * alignment
+    root_image_offset = (
+        math.ceil((header_size + padded_installer_file_size) / alignment) * alignment
+    )
 
     with opn_file.open(mode="w+b", buffering=0) as opn:
         # write empty header (is populated later)
@@ -35,14 +33,6 @@ def main():
 
         # write installer padding
         opn.write(b"\n" * installer_padding_size)
-
-        # write root image
-        opn.seek(root_image_offset)
-        with root_image_file.open(mode="rb") as root_image:
-            shutil.copyfileobj(root_image, opn)
-
-        # write root image padding
-        opn.write(b"\x00" * root_image_padding_size)
 
         # magic prefix
         opn.seek(0)

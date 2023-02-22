@@ -33,7 +33,7 @@ sync
   echo n
   echo 3
   echo
-  echo +27G
+  echo +3.6G
   # add new /dev/mmcblk0p4 partition
   echo n
   echo 4
@@ -60,7 +60,7 @@ umount /data
 # reboot
 MOUNTED_FILE_SYSTEMS=$(mount | grep '^/dev' | cut -d' ' -f3)
 [ -n "${MOUNTED_FILE_SYSTEMS}" ] && (umount -fr "${MOUNTED_FILE_SYSTEMS}" && sync && sleep 2)
-chest-ctl --reset
+chest-ctl --shutdown
 halt -f
 
 # the root disk is placed after this script at the next multiple of 1024 bytes
