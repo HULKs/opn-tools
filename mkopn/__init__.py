@@ -64,9 +64,10 @@ def main():
         opn.seek(192)
         opn.write(b"\x00\x02\x00\x08\x00\x05\x00\x0B")
 
-        # root image offset
+        # root image checksum
+        rootfs_checksum = sha256sum_from_position_to_end(opn, root_image_offset)
         opn.seek(136)
-        opn.write(root_image_offset.to_bytes(8, byteorder="big"))
+        opn.write(rootfs_checksum.digest())
 
         # header checksum
         opn.seek(56)
@@ -77,4 +78,13 @@ def main():
         # print checksums
         print(f"Installer checksum: {installer_checksum.hexdigest()}")
         print(f"Header checksum: {header_checksum.hexdigest()}")
-        print(f"Root image offset: {root_image_offset}")
+        print(f"Root image checksum: {rootfs_checksum.hexdigest()}")
+
+def sha256sum_from_position_to_end(file, position):
+    file.seek(position)
+    checksum_hash = hashlib.sha256()
+    buffer = bytearray(4096)
+    memory_view = memoryview(buffer)
+    for amount in iter(lambda: file.readinto(memory_view), 0):
+        checksum_hash.update(memory_view[:amount])
+    return checksum_hash

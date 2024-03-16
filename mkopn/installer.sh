@@ -12,8 +12,11 @@ set -eux
 
 IMAGE_FILE="${3}"
 
+INSTALLER_SIZE=$(hexdump -s96 -n8 -v -e '8/1 "%02x"' "${IMAGE_FILE}")
+INSTALLER_SIZE=$(printf "%d" "0x${INSTALLER_SIZE}")
+ROOT_IMAGE_OFFSET=$(( $INSTALLER_SIZE + 0x1000 ))
+
 # write root
-ROOT_IMAGE_OFFSET=$(printf "%d" "0x$(hexdump -s136 -n8 -v -e "8/1 \"%02x\"" "${IMAGE_FILE}")")
 INPUT_BLOCKSIZE=4096
 OUTPUT_BLOCKSIZE=4096
 dd if="${IMAGE_FILE}" bs="${INPUT_BLOCKSIZE}" skip=$((ROOT_IMAGE_OFFSET / INPUT_BLOCKSIZE)) | gunzip -c | dd of=/dev/mmcblk0p3 bs="${OUTPUT_BLOCKSIZE}"
